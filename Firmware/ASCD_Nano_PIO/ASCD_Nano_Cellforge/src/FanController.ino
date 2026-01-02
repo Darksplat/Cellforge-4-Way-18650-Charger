@@ -1,54 +1,45 @@
-
 /*
 // ASDC Nano 4x Arduino Charger / Discharger
 // ---------------------------------------------------------------------------
 // Created by Brett Watt on 19/03/2019
-// Copyright 2018 - Under creative commons license 3.0:
-
-Modified by Jeremy Younger @darksplat on 06/12/2025
-// https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode
-//
-// This software is furnished "as is", without technical support, and with no
-// warranty, express or implied, as to its usefulness for any purpose.
-//
-// @brief
-// ASDC Nano 4x Arduino Charger / Discharger
-// Code for testing the 16x2 LCD 
-// Version 2.0.0
-//
-// @author Email: 
-//       Web: www.darksplat.com
+// Modified by Jeremy Younger @darksplat on 06/12/2025
 */
 
-// FanController.ino
-// Controls the cooling fan based on temperature and discharge state.
+#include <Arduino.h>
+#include "Pins.h"
+
+// =====================================================
+// Fan controller (ESP32-safe PWM)
+// =====================================================
 
 void fanController()
 {
-  static boolean fanOn = 0;
-  const byte fanTempMin = 28; // Start fan at this temperature (°C)
-  const byte fanTempMax = 38; // Max temperature (°C) for full speed
-  boolean dischargeFanOn = false;
+  static bool fanOn = false;
+  const byte fanTempMin = 28; // °C
+  const byte fanTempMax = 38; // °C
+  bool dischargeFanOn = false;
 
-  // If any module is discharging, force fan full speed
+  // Force fan full speed if any module is discharging
   for (byte j = 0; j < settings.moduleCount; j++)
   {
     if (module[j].cycleState == 5) // Discharge state
     {
       dischargeFanOn = true;
+      break;
     }
   }
 
-  if (dischargeFanOn == true)
+  if (dischargeFanOn)
   {
-    digitalWrite(FAN, HIGH);
+    ledcWrite(FAN_PWM_CHANNEL, 255);
+    fanOn = true;
     return;
   }
 
   if (ambientTemperature < fanTempMin)
   {
-    digitalWrite(FAN, LOW);
-    fanOn = 0;
+    ledcWrite(FAN_PWM_CHANNEL, 0);
+    fanOn = false;
   }
   else if (ambientTemperature < fanTempMax)
   {
@@ -58,19 +49,20 @@ void fanController()
                        settings.pwmFanMinStart,
                        252);
 
-    if (fanOn == 0)
+    if (!fanOn)
     {
-      fanSpeed = 255;
-      fanOn = 1;
+      // Kick-start fan
+      ledcWrite(FAN_PWM_CHANNEL, 255);
+      fanOn = true;
     }
     else
     {
-      analogWrite(FAN, fanSpeed);
+      ledcWrite(FAN_PWM_CHANNEL, fanSpeed);
     }
   }
   else
   {
-    digitalWrite(FAN, HIGH);
-    fanOn = 1;
+    ledcWrite(FAN_PWM_CHANNEL, 255);
+    fanOn = true;
   }
 }

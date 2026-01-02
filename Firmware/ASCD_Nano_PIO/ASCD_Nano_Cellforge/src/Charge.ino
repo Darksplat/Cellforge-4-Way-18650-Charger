@@ -1,37 +1,45 @@
-
 /*
 // ASDC Nano 4x Arduino Charger / Discharger
 // ---------------------------------------------------------------------------
 // Created by Brett Watt on 19/03/2019
-// Copyright 2018 - Under creative commons license 3.0:
-
-Modified by Jeremy Younger @darksplat on 06/12/2025
-// https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode
-//
-// This software is furnished "as is", without technical support, and with no
-// warranty, express or implied, as to its usefulness for any purpose.
-//
-// @brief
-// ASDC Nano 4x Arduino Charger / Discharger
-// Code for testing the 16x2 LCD 
-// Version 2.0.0
-//
-// @author Email: 
-//       Web: www.darksplat.com
+// Modified by Jeremy Younger @darksplat on 06/12/2025
 */
 
-// Charge.ino
-// Determines whether charging is “done” for a module based on TP5100 LED pin.
+#include <Arduino.h>
+#include "Pins.h"
+
+
+// =====================================================
+// Charge cycle handler
+// Determines whether charging is complete for a module
+// =====================================================
 
 bool chargeCycle(byte j)
 {
-  // If the charge LED sense voltage is above the mid threshold, treat as “done”
-  if (readMux(module[j].chargeLedPin) >= settings.chargeLedPinMidVolatge[j]) // Mid On / Off Voltage of the TP5100 Charge LED Pin
+  bool chargeDone = false;
+
+  switch (j)
   {
-    return 1;
+    case 0:
+      chargeDone = digitalRead(PIN_CD1);
+      break;
+
+    case 1:
+      chargeDone = digitalRead(PIN_CD2);
+      break;
+
+    case 2:
+      chargeDone = digitalRead(PIN_CD3);
+      break;
+
+    case 3:
+      chargeDone = digitalRead(PIN_CD4);
+      break;
+
+    default:
+      return false;
   }
-  else
-  {
-    return 0;
-  }
+
+  // TP5100: HIGH = charge complete, LOW = charging
+  return chargeDone;
 }

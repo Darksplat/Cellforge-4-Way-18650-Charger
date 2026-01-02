@@ -3,75 +3,37 @@
 // ---------------------------------------------------------------------------
 // Created by Brett Watt on 19/03/2019
 // Copyright 2018 - Under creative commons license 3.0:
-
-Modified by Jeremy Younger @darksplat on 06/12/2025
+//
+// Modified by Jeremy Younger @darksplat on 06/12/2025
 // https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode
-//
-// This software is furnished "as is", without technical support, and with no
-// warranty, express or implied, as to its usefulness for any purpose.
-//
-// @brief
-// ASDC Nano 4x Arduino Charger / Discharger
-// Code for testing the 16x2 LCD 
-// Version 2.0.0
-//
-// @author Email: 
-//       Web: www.darksplat.com
 */
-
-// ASCD_Nano.ino
-// ASCD Nano 4x 18650 Charger / Discharger
-// Main file: includes, globals, setup() and loop().
 
 #include <Arduino.h>
 #include <Wire.h>
+
+#include "Pins.h"              // MUST be first custom header
+#include "DebugConfig.h"
+#include "Temp_Sensor_Serials.h"
+#include "Secrets.h"
+
 #include <OneWire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DallasTemperature.h>
-#include <SoftwareSerial.h>
+// #include <SoftwareSerial.h>   // Disabled for Nano ESP32
 
-#include "DebugConfig.h"
-#include "Temp_Sensor_Serials.h"
 
-// ----------------------
-// Pins
-// ----------------------
 
-#define TEMPERATURE_PRECISION 9
-#define ONE_WIRE_BUS 4 // Pin 4 Temperature Sensors
-
-// 74HC595 shift register pins
-const byte latchPin = 7;  // ST_CP
-const byte clockPin = 8;  // SH_CP
-const byte dataPin  = 6;  // DS
-
-// Mux control pins
-const byte S0 = 12;
-const byte S1 = 11;
-const byte S2 = 10;
-const byte S3 = 9;
-
-// Mux SIG pin (Analog A0)
-const byte SIG = 14;
-
-// Button pin (Analog A1)
-const byte BTN = 15;
-
-// Buzzer pin (Analog A2)
-// const byte BUZZ = 5; // PCB Version 1.1
-const byte BUZZ = 16;     // PCB Version 1.11
-
-// Fan pin (PWM, Digital 5)
-const byte FAN = 5;       // PCB Version 1.11+ only
 
 // ----------------------
 // Objects
 // ----------------------
 
-LiquidCrystal_I2C lcd(0x27, 16, 2); // LCD at address 0x27, 16x2
-OneWire oneWire(ONE_WIRE_BUS);      // OneWire bus for DS18B20 sensors
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+OneWire oneWire(PIN_TMP);
 DallasTemperature sensors(&oneWire);
-SoftwareSerial ESP8266(3, 2);       // RX, TX
+
+// SoftwareSerial ESP8266(3, 2); // RX, TX – disabled for ESP32
+
 
 // ----------------------
 // Settings struct
@@ -95,52 +57,46 @@ typedef struct
   const byte  screenTime                 = 4;
   const int   dischargeReadInterval      = 5000;
   const float storageChargeVoltage       = 0.00;
-  const byte  pwmFanMinStart             = 115;   // Minimum PWM for fan start
+  const byte  pwmFanMinStart             = 115;
 } CustomSettings;
 
 CustomSettings settings;
 
+
 // ----------------------
-// Module struct
+// Module struct (UNCHANGED for now)
 // ----------------------
 
 typedef struct
 {
-  // Pin Definitions (mux patterns)
   const bool batteryVolatgePin[4];
   const bool batteryVolatgeDropPin[4];
   const bool chargeLedPin[4];
   const byte chargeMosfetPin;
   const byte dischargeMosfetPin;
 
-  // Timer
   unsigned long longMilliSecondsCleared;
   byte seconds;
   byte minutes;
   byte hours;
 
-  // Module Cycle
   byte cycleCount;
   bool batteryBarcode;
   bool insertData;
   byte cycleState;
   byte batteryFaultCode;
 
-  // Voltage Readings
   float batteryInitialVoltage;
   float batteryVoltage;
 
-  // Temperature Readings
   byte batteryInitialTemp;
   byte batteryHighestTemp;
   byte batteryCurrentTemp;
   byte tempCount;
 
-  // Milli Ohms
   float tempMilliOhmsValue;
   float milliOhmsValue;
 
-  // Discharge
   int intMilliSecondsCount;
   unsigned long longMilliSecondsPreviousCount;
   unsigned long longMilliSecondsPrevious;
@@ -152,142 +108,116 @@ typedef struct
   bool pendingDischargeRecord;
 } Modules;
 
-// Module pin configuration for 4 slots
 Modules module[4] =
 {
-  {{1, 1, 0, 1}, {1, 1, 1, 1}, {0, 1, 0, 1}, 0, 1},
-  {{1, 0, 0, 1}, {0, 1, 1, 1}, {0, 0, 0, 1}, 2, 3},
-  {{1, 1, 1, 0}, {1, 0, 1, 1}, {0, 1, 1, 0}, 4, 5},
-  {{1, 0, 1, 0}, {0, 0, 1, 1}, {0, 0, 1, 0}, 6, 7}
+  {{1,1,0,1}, {1,1,1,1}, {0,1,0,1}, 0, 1},
+  {{1,0,0,1}, {0,1,1,1}, {0,0,0,1}, 2, 3},
+  {{1,1,1,0}, {1,0,1,1}, {0,1,1,0}, 4, 5},
+  {{1,0,1,0}, {0,0,1,1}, {0,0,1,0}, 6, 7}
 };
+
 
 // ----------------------
 // Global state
 // ----------------------
 
 byte ambientTemperature = 0;
-bool  buttonPressed     = false;
-bool  readSerialResponse= false;
-char  serialSendString[400];
-byte  countSerialSend   = 0;
-bool  soundBuzzer       = false;
+bool buttonPressed = false;
+bool readSerialResponse = false;
+char serialSendString[400];
+byte countSerialSend = 0;
+bool soundBuzzer = false;
+
 
 // ----------------------
 // Forward declarations
-// (functions are actually defined in the other .ino tabs)
 // ----------------------
 
-// Buzzer.ino
 void buzzer();
-
-// FanController.ino
 void fanController();
-
-// SerialComm.ino
 void sendSerial();
 void readSerial();
 void returnCodes(int codeID);
-
-// Button.ino
 void button();
-
-// LCD_UI.ino
 void cycleStateLCD();
 void cycleStateLCDOutput(byte j);
-
-// Timing.ino
 void secondsTimer(byte j);
 void clearSecondsTimer(byte j);
 void initializeVariables(byte j);
-
-// StateMachine.ino
 void cycleStateValues();
-
-// Discharge.ino
 bool dischargeCycle(byte j);
-
-// Charge.ino
 bool chargeCycle(byte j);
-
-// Resistance.ino
 byte milliOhms(byte j);
-
-// Temperature.ino
 byte getTemperature(byte j);
 byte processTemperature(byte j);
 void getAmbientTemperature();
+bool batteryCheck(byte j);
+void digitalSwitch(byte j, bool value);
+float readMux(const bool inputArray[]);   // to be replaced later
 
-// IOUtils.ino
-bool  batteryCheck(byte j);
-void  digitalSwitch(byte j, bool value);
-float readMux(const bool inputArray[]);
 
 // ----------------------
-// setup() and loop()
+// setup()
 // ----------------------
 
 void setup()
 {
-  // Shift register pins
-  pinMode(latchPin, OUTPUT);
-  pinMode(clockPin, OUTPUT);
-  pinMode(dataPin,  OUTPUT);
-  digitalWrite(latchPin, LOW);
+  // Shift register
+  pinMode(PIN_SR_DATA, OUTPUT);
+  pinMode(PIN_SR_LATCH, OUTPUT);
+  pinMode(PIN_SR_CLOCK, OUTPUT);
+  digitalWrite(PIN_SR_LATCH, LOW);
 
-  // MUX initialisation
-  pinMode(S0, OUTPUT);
-  pinMode(S1, OUTPUT);
-  pinMode(S2, OUTPUT);
-  pinMode(S3, OUTPUT);
-  digitalWrite(S0, LOW);
-  digitalWrite(S1, LOW);
-  digitalWrite(S2, LOW);
-  digitalWrite(S3, LOW);
+  // TP5100 charge status inputs
+  pinMode(PIN_CD1, INPUT);
+  pinMode(PIN_CD2, INPUT);
+  pinMode(PIN_CD3, INPUT);
+  pinMode(PIN_CD4, INPUT);
 
   // Button
-  pinMode(BTN, INPUT);
+  pinMode(PIN_BTN, INPUT);
 
   // Buzzer
-  pinMode(BUZZ, OUTPUT);
-  digitalWrite(BUZZ, HIGH);
+  pinMode(PIN_BUZZ, OUTPUT);
+  digitalWrite(PIN_BUZZ, HIGH);
   delay(50);
-  digitalWrite(BUZZ, LOW);
+  digitalWrite(PIN_BUZZ, LOW);
 
   // Fan
-  pinMode(FAN, OUTPUT);
+  pinMode(PIN_FAN, OUTPUT);
+  ledcSetup(FAN_PWM_CHANNEL, FAN_PWM_FREQ, FAN_PWM_RES);
+  ledcAttachPin(PIN_FAN, FAN_PWM_CHANNEL);
+  ledcWrite(FAN_PWM_CHANNEL, 0); // fan off
 
-  // Serial for debug + ESP link
+
+  // Debug serial
   DBG_BEGIN(115200);
   Serial.setTimeout(5);
-
-  // SoftwareSerial to ESP8266
-  ESP8266.begin(57600);
-  ESP8266.setTimeout(5);
 
   // LCD startup
   lcd.init();
   lcd.clear();
   lcd.backlight();
   lcd.setCursor(0, 0);
-  lcd.print(F("ASCD NANO V1.0.2"));
+  lcd.print(F("ASCD NANO ESP32"));
   lcd.setCursor(0, 1);
   lcd.print(F("Init TP5100....."));
 
-  // Initial module / MOSFET sequence & mux pre-pull down
+  // Initial module sequence
   for (byte i = 0; i < settings.moduleCount; i++)
   {
-    digitalWrite(FAN, HIGH); // Fan on during initialisation
+    digitalWrite(PIN_FAN, HIGH);
 
     digitalSwitch(module[i].chargeMosfetPin, 1);
     delay(500);
     digitalSwitch(module[i].chargeMosfetPin, 0);
     delay(500);
 
-    // Read each battery voltage input to discharge stray charge
+    // Legacy stray charge discharge (to be replaced with ADS read later)
     readMux(module[i].batteryVolatgePin);
 
     digitalSwitch(module[i].dischargeMosfetPin, 1);
-    digitalWrite(FAN, LOW); // Fan off
+    digitalWrite(PIN_FAN, LOW);
     delay(500);
     digitalSwitch(module[i].dischargeMosfetPin, 0);
     delay(500);
@@ -296,54 +226,50 @@ void setup()
   lcd.setCursor(0, 1);
   lcd.print(F("Starting........"));
 
-  // Start DallasTemperature library
   sensors.begin();
-
   lcd.clear();
 }
 
+
+// ----------------------
+// loop()
+// ----------------------
+
 void loop()
 {
-  if (readSerialResponse == true)
+  if (readSerialResponse)
   {
     readSerial();
   }
 
-  // Timers using millis()
   static long buttonMillis;
   static long cycleStateValuesMillis;
   static long sendSerialMillis;
   static long buzzerMillis;
+
   long currentMillis = millis();
 
-  // Poll button every 2 ms
   if (currentMillis - buttonMillis >= 2)
   {
     button();
     buttonMillis = currentMillis;
   }
 
-  currentMillis = millis();
-  // Buzzer update every 50 ms
   if (currentMillis - buzzerMillis >= 50)
   {
     buzzer();
     buzzerMillis = currentMillis;
   }
 
-  currentMillis = millis();
-  // Core cycle logic every 1 second
   if (currentMillis - cycleStateValuesMillis >= 1000)
   {
     cycleStateValues();
     cycleStateValuesMillis = currentMillis;
   }
 
-  currentMillis = millis();
-  // Send serial every 4 seconds
   if (currentMillis - sendSerialMillis >= 4000)
   {
-    if (readSerialResponse == false || countSerialSend > 5)
+    if (!readSerialResponse || countSerialSend > 5)
     {
       sendSerial();
       countSerialSend = 0;
