@@ -55,23 +55,9 @@ This repository contains **firmware, hardware, documentation, and web platform c
 - Offline detection: **Cron-enforced**
 - UI: **Live status, signal bars, local time rendering**
 
-This is no longer a proof of concept — the platform is operating with real hardware.
-
 ---
 
 ## Repository Structure (high-level)
-
-Firmware/
-ASCD_Nano_PIO/
-ASCD_Nano_Cellforge/
-Website/
-cellforge/
-api/
-app/
-cron/
-templates/
-Hardware/
-Docs/
 
 
 ---
