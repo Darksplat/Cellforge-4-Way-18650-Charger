@@ -1,54 +1,106 @@
-# CellForge 4 Way 18650 Charger
+# CellForge – 4 Way 18650 Charger & Analytics Platform
 
-Open-source 4-slot 18650 battery charger, discharger, and analyser with capacity, energy, and internal-resistance measurement.
+CellForge is an open hardware and software project for testing, analysing, and cataloguing 18650 lithium-ion cells.
 
-## What this project is
-CellForge is a hardware + firmware project for testing and grading individual 18650 lithium-ion cells. The goal is a practical, repeatable workflow for:
-- Charging and discharging cells in controlled modes
-- Measuring **capacity (mAh)** and **energy (Wh)**
-- Recording **internal resistance (IR)** as a measured value
-- Producing consistent results suitable for sorting and reuse (“second life” cells)
+It is inspired by Brett Watt’s original ASCD Nano charger and extends the concept with modern hardware, Wi-Fi connectivity, and a web-based analytics platform.
 
-## Safety notice (read first)
-Lithium-ion cells can be dangerous if mishandled. This project involves:
-- High current paths
-- Heat generation
-- Risk of short-circuit, fire, or cell venting
+This repository contains **firmware, hardware, documentation, and web platform components** required to build and operate a connected 4-bay charger.
 
-You are responsible for building and using this project safely. Use appropriate fusing, insulation, airflow, temperature monitoring, and never leave cells unattended while testing.
+---
 
-## Repository structure (high level)
-This repository will contain:
-- **Firmware** (Arduino Nano baseline and future ESP32 variants)
-- **Hardware** (schematics, PCB, gerbers, BOM)
-- **Documentation** (build guides, calibration, operating modes)
-- **Tools** (utilities, scripts, data formats)
-- **Archive** (historical reference material)
+## Project Components
 
-## Current status
-- In active development and consolidation.
-- Legacy code and reference material are being organised into a stable structure.
-- ESP32 migration is planned, with the Arduino Nano baseline retained for existing builds.
+### Hardware
+- 4-slot 18650 charger / discharger
+- TP5100 charge controllers per slot
+- Dual ADS1115 (16-bit I²C ADCs)
+  - Battery voltage sensing
+  - Load / discharge voltage sensing
+- DS18B20 temperature sensors
+- Active cooling with PWM fan control
+- 3.3 V logic throughout (ESP32-safe)
 
-## Getting started
-Until the full docs are published, the recommended starting point is:
-1. Review the safety notes above.
-2. Browse `firmware/` for the baseline build.
-3. Browse `hardware/` for schematics/PCB and verify your board revision.
-4. Use `docs/` for calibration and operating instructions as they are added.
+### Firmware
+- Target: **Arduino Nano ESP32 (ESP32-S3)**
+- Wi-Fi connectivity
+- Server heartbeat (PING) protocol
+- RSSI (signal strength) reporting
+- Internal resistance measurement
+- Capacity and energy calculation
+- Modular PlatformIO-based build
 
-## Contributing
-Contributions are welcome:
-- Bug fixes and refactors
-- Documentation improvements
-- Hardware revision notes
-- Test data and repeatability validation
+### Web Platform
+- PHP + MySQL backend
+- User authentication
+- Charger registration and claiming
+- Live charger connectivity status
+- Signal strength visualisation
+- Cell inventory
+- Run ingestion (start, IR, complete, error)
+- Cron-based offline detection
 
-See `CONTRIBUTING.md` (to be added) once the repo structure is finalised.
+### Data
+- Cell metadata (barcode-centric)
+- Internal resistance results
+- Capacity (mAh) and energy (Wh)
+- Charger telemetry (presence, RSSI)
 
-## License
-This project is licensed under the MIT License unless otherwise noted in specific subfolders (for example, third-party archive material).
-See `LICENSE` for details.
+---
 
-## Credits and references
-This project builds on prior community work and legacy material preserved for reference in the `archive/` folder. Where applicable, original attribution is retained alongside archived content.
+## Current Status
+
+- Firmware: **Stable, Wi-Fi enabled**
+- Connectivity: **Server-authoritative heartbeat**
+- Telemetry: **RSSI reporting live**
+- Offline detection: **Cron-enforced**
+- UI: **Live status, signal bars, local time rendering**
+
+This is no longer a proof of concept — the platform is operating with real hardware.
+
+---
+
+## Repository Structure (high-level)
+
+Firmware/
+ASCD_Nano_PIO/
+ASCD_Nano_Cellforge/
+Website/
+cellforge/
+api/
+app/
+cron/
+templates/
+Hardware/
+Docs/
+
+
+---
+
+## Design Principles
+
+- Server decides truth (presence, offline state)
+- Firmware reports facts, not assumptions
+- Browser renders user-local time
+- Hardware remains Brett-compatible where practical
+- Electrical safety first (3.3 V logic, no mixed-voltage traps)
+
+---
+
+## Licensing
+
+Original ASCD Nano work:
+- © Brett Watt
+- Creative Commons BY-NC-SA 3.0
+
+CellForge modifications:
+- © Jeremy Younger
+- Released under the same license unless otherwise stated
+
+---
+
+## Disclaimer
+
+This project involves lithium-ion cells.
+Improper use can result in fire, injury, or property damage.
+
+You are responsible for ensuring safe construction, operation, and supervision.
