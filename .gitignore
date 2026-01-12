@@ -11,6 +11,10 @@
 *.sln.docstates
 *.env
 
+# Ignore CellForge website media (large/generated assets)
+Media/CellForge-Site/
+
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
