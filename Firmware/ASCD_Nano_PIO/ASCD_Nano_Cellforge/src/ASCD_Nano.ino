@@ -10,18 +10,20 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <WiFi.h>
 
 #include "Pins.h"              // MUST be first custom header
 #include "DebugConfig.h"
 #include "Temp_Sensor_Serials.h"
 #include "Secrets.h"
 
+#include "StatusLED.h"
+#include "WifiManager.h"
+
 #include <OneWire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DallasTemperature.h>
 // #include <SoftwareSerial.h>   // Disabled for Nano ESP32
-
-
 
 
 // ----------------------
@@ -32,39 +34,55 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 OneWire oneWire(PIN_TMP);
 DallasTemperature sensors(&oneWire);
 
-// SoftwareSerial ESP8266(3, 2); // RX, TX – disabled for ESP32
-
 
 // ----------------------
-// Settings struct
+// Settings struct (ESP32 / ADS1115 corrected)
 // ----------------------
 
 typedef struct
 {
-  const float shuntResistor[4]           = {3.3, 3.3, 3.3, 3.3};
-  const float chargeLedPinMidVolatge[4]  = {1.8, 1.8, 1.85, 1.85};
-  const float referenceVoltage           = 5.02;
-  const float defaultBatteryCutOffVoltage= 2.8;
-  const byte  restTimeMinutes            = 1;
-  const int   lowMilliamps               = 1000;
-  const int   highMilliOhms              = 500;
-  const int   offsetMilliOhms            = 0;
-  const byte  chargingTimeout            = 8;
-  const byte  tempThreshold              = 7;
-  const byte  tempMaxThreshold           = 20;
-  const float batteryVolatgeLeak         = 0.50;
-  const byte  moduleCount                = 4;
-  const byte  screenTime                 = 4;
-  const int   dischargeReadInterval      = 5000;
-  const float storageChargeVoltage       = 0.00;
-  const byte  pwmFanMinStart             = 115;
+  // Hardware calibration
+  const float shuntResistor[4]            = {3.3, 3.3, 3.3, 3.3};
+
+  // Charge LED sense thresholds (volts at sense point)
+  const float chargeLedPinMidVolatge[4]   = {1.8, 1.8, 1.85, 1.85};
+
+  /*
+    referenceVoltage was used on the original Arduino Nano (AVR, 0–5V ADC).
+    On ESP32 + ADS1115 this must NOT be used.
+    Retained only to avoid breaking legacy paths.
+  */
+  const float referenceVoltage            = 0.0;   // DEPRECATED – DO NOT USE
+
+  // Battery behaviour
+  const float defaultBatteryCutOffVoltage = 2.8;
+  const byte  restTimeMinutes             = 1;
+  const int   lowMilliamps                = 1000;
+  const int   highMilliOhms               = 500;
+  const int   offsetMilliOhms             = 0;
+
+  // Safety / timing
+  const byte  chargingTimeout             = 8;
+  const byte  tempThreshold               = 7;
+  const byte  tempMaxThreshold            = 20;
+  const float batteryVolatgeLeak           = 0.50;
+
+  // System
+  const byte  moduleCount                 = 4;
+  const byte  screenTime                  = 4;
+  const int   dischargeReadInterval       = 5000;
+  const float storageChargeVoltage        = 0.00;
+
+  // Fan
+  const byte  pwmFanMinStart              = 115;
+
 } CustomSettings;
 
 CustomSettings settings;
 
 
 // ----------------------
-// Module struct (UNCHANGED for now)
+// Module struct (UNCHANGED)
 // ----------------------
 
 typedef struct
@@ -153,7 +171,7 @@ byte processTemperature(byte j);
 void getAmbientTemperature();
 bool batteryCheck(byte j);
 void digitalSwitch(byte j, bool value);
-float readMux(const bool inputArray[]);   // to be replaced later
+float readMux(const bool inputArray[]);   // legacy wrapper
 
 
 // ----------------------
@@ -162,6 +180,33 @@ float readMux(const bool inputArray[]);   // to be replaced later
 
 void setup()
 {
+  // ----------------------
+  // Serial bring-up window (ESP32 USB CDC timing)
+  // ----------------------
+  DBG_BEGIN(115200);
+  Serial.setTimeout(5);
+
+  unsigned long serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000)
+  {
+    delay(10);
+  }
+
+  DBG_PRINTLN(F(""));
+  DBG_PRINTLN(F("===================================="));
+  DBG_PRINTLN(F(" ASCD NANO ESP32 BOOT"));
+  DBG_PRINTLN(F("===================================="));
+
+  // ----------------------
+  // Status LED + Wi-Fi (10 attempts, boot only)
+  // ----------------------
+  StatusLED::begin();
+  connectToWiFi();
+
+  // ----------------------
+  // Hardware setup
+  // ----------------------
+
   // Shift register
   pinMode(PIN_SR_DATA, OUTPUT);
   pinMode(PIN_SR_LATCH, OUTPUT);
@@ -187,12 +232,7 @@ void setup()
   pinMode(PIN_FAN, OUTPUT);
   ledcSetup(FAN_PWM_CHANNEL, FAN_PWM_FREQ, FAN_PWM_RES);
   ledcAttachPin(PIN_FAN, FAN_PWM_CHANNEL);
-  ledcWrite(FAN_PWM_CHANNEL, 0); // fan off
-
-
-  // Debug serial
-  DBG_BEGIN(115200);
-  Serial.setTimeout(5);
+  ledcWrite(FAN_PWM_CHANNEL, 0);
 
   // LCD startup
   lcd.init();
@@ -213,7 +253,6 @@ void setup()
     digitalSwitch(module[i].chargeMosfetPin, 0);
     delay(500);
 
-    // Legacy stray charge discharge (to be replaced with ADS read later)
     readMux(module[i].batteryVolatgePin);
 
     digitalSwitch(module[i].dischargeMosfetPin, 1);
@@ -237,6 +276,9 @@ void setup()
 
 void loop()
 {
+  // Status LED engine (non-blocking)
+  StatusLED::update();
+
   if (readSerialResponse)
   {
     readSerial();
